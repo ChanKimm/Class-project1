@@ -1,0 +1,199 @@
+----
+title: "Preliminary Exploratory Data Analysis" 
+subtitle: "Class Project"                     
+author: "Anonymous"                        
+date: "11/17/2024"                             
+output:                                        
+  html_notebook:                                 
+    fig_height: 7                               
+    fig_width: 10                                  
+----
+# Data Sources
+
+- Golf Dataset (golf_data):
+  - Player_initial_last: Player names.
+  - strokes: Total strokes (a key performance metric).
+  - hole_FDP: Hole performance (points).
+  - sg_putt, sg_t2g, sg_total: Additional performance metrics for putting, tee-to-green, and total score.
+
+- Basketball Dataset (basketball_data):
+  - player: Player names.
+  - age: Age of the player.
+  -experience: Years of professional experience.
+
+----
+
+# Setup
+
+```{r}
+# Load necessary libraries
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+library(stringr)
+
+# Define file paths for datasets
+golf_path <- "/Users/daniel/Desktop/stat 184/ASA All PGA Raw Data - Tourn Level.csv"
+basketball_path <- "/Users/daniel/Desktop/stat 184/Player Season Info.csv"
+
+# Load the data into R
+golf_data <- read.csv(golf_path)
+basketball_data <- read.csv(basketball_path)
+```
+
+```{r}
+# Clean player names in both datasets
+golf_data <- golf_data %>%
+  mutate(Player_initial_last = str_trim(Player_initial_last))  # Remove whitespace
+
+basketball_data <- basketball_data %>%
+  mutate(player = str_trim(player))  # Remove whitespace
+```
+
+#Data Wrangling
+#1. General data wrangling using various data verbs like filter, mutate, summarise, arrange, group_by, etc.
+```{r}
+
+golf_clean <- golf_data %>%
+  filter(!is.na(hole_FDP), !is.na(strokes), strokes > 0) %>% 
+  mutate(
+    ScoringEfficiency = hole_FDP / strokes,  # Create a new efficiency metric
+    PerformanceCategory = if_else(ScoringEfficiency >= 1, "High", "Low")
+  ) %>%
+  group_by(PerformanceCategory) %>%
+  summarise(
+    avg_hole_FDP = mean(hole_FDP, na.rm = TRUE),
+    avg_strokes = mean(strokes, na.rm = TRUE)
+  ) %>%
+  arrange(desc(avg_hole_FDP))  # Arrange by performance
+golf_clean
+
+
+```
+
+#2 Joins: Merging Golf and Basketball Data
+```{r}
+# Join datasets on player names
+combined_data <- inner_join(golf_data, basketball_data, by = c("Player_initial_last" = "player"))
+head(combined_data)
+
+
+
+```
+
+#3Wide to Long Transformation
+```{r}
+# Transform golf data from wide to long format
+golf_long <- golf_data %>%
+  select(Player_initial_last, sg_putt, sg_t2g, sg_total) %>%
+  pivot_longer(cols = c(sg_putt, sg_t2g, sg_total), names_to = "Metric", values_to = "Value")
+
+head(golf_long)
+
+```
+
+#4 Regular Expressions
+```{r}
+# Extract initials from basketball player names
+basketball_clean <- basketball_data %>%
+  mutate(Initials = str_extract(player, "\\b[A-Z]"))  # Extract the first capital letter
+head(basketball_clean)
+
+```
+
+#5 reduction and/or transformation functions like mean, sum, max, min, n(), rank, pmin, etc.
+```{r}
+# Summarize basketball data
+basketball_summary <- basketball_data %>%
+  summarise(
+    avg_age = mean(age, na.rm = TRUE),
+    max_experience = max(experience, na.rm = TRUE),
+    total_players = n()
+  )
+basketball_summary
+
+```
+
+#Visualizations
+
+##Golf: Scoring Efficiency Distribution
+1. Relationship Between strokes, hole_FDP, and ScoringEfficiency
+
+```{r}
+ggplot(golf_clean, aes(x = avg_strokes, y = avg_hole_FDP, color = PerformanceCategory)) +
+  geom_point(size = 4, alpha = 0.7) +
+  labs(title = "Strokes vs. Hole FDP by Performance Category",
+       x = "Average Strokes",
+       y = "Average Hole FDP",
+       color = "Performance Category") +
+  theme_minimal()
+
+
+
+```
+2. Distribution of ScoringEfficiency by PerformanceCategory
+```{r}
+
+ggplot(golf_clean, aes(x = PerformanceCategory, y = avg_hole_FDP, fill = PerformanceCategory)) +
+  geom_bar(stat = "identity", alpha = 0.8) +
+  labs(title = "Average Hole FDP by Performance Category",
+       x = "Performance Category",
+       y = "Average Hole FDP",
+       fill = "Performance Category") +
+  theme_minimal()
+
+```
+##Basketball Data
+1.Relationship Between age, experience, and PointsPerExperience
+```{r}
+basketball_clean <- basketball_data %>%
+  mutate(PointsPerExperience = age / experience)
+
+ggplot(basketball_clean, aes(x = experience, y = age, color = PointsPerExperience)) +
+  geom_point(alpha = 0.7) +
+  labs(title = "Age vs. Experience vs. Points Per Experience",
+       x = "Experience (Years)",
+       y = "Age",
+       color = "Points Per Experience") +
+  theme_minimal()
+
+```
+
+2. Points Per Experience by Age Group
+```{r}
+basketball_clean <- basketball_clean %>%
+  mutate(AgeGroup = case_when(
+    age < 25 ~ "Young",
+    age >= 25 & age < 30 ~ "Prime",
+    age >= 30 ~ "Veteran"
+  ))
+
+ggplot(basketball_clean, aes(x = AgeGroup, y = PointsPerExperience, fill = AgeGroup)) +
+  geom_boxplot(alpha = 0.7) +
+  labs(title = "Points Per Experience by Age Group",
+       x = "Age Group",
+       y = "Points Per Experience",
+       fill = "Age Group") +
+  theme_minimal()
+
+```
+
+
+
+
+#Insights and Summary
+- Techniques Used:
+  General Data Wrangling: Applied functions such as filter, mutate, group_by, and summarise to clean and            organize the data.
+  Joins: Combined the golf and basketball datasets based on player names.
+  Pivoting: Reshaped the golf data from wide format to long format using pivot_longer.
+  Regular Expressions: Extracted players' initials from their names in the basketball dataset.
+  Reduction/Transformation Functions: Calculated summary metrics using functions like mean, max, and n().
+  
+- Key Insights:
+Golf:
+Players with lower stroke counts tend to achieve higher hole_FDP scores and better ScoringEfficiency metrics.
+Categorizing player performance into "High" and "Low" groups offers meaningful distinctions between top and underperforming players.
+
+Basketball:
+Players with greater experience consistently show higher performance when evaluated by points per year of experience.
+Younger players, while often showing potential, exhibit greater variability in their performance compared to veterans.
